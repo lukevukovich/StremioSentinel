@@ -1,0 +1,5 @@
+inkscape icons/icon.svg -o icons/icon-16.png -w 16 -h 16
+inkscape icons/icon.svg -o icons/icon-24.png -w 24 -h 24
+inkscape icons/icon.svg -o icons/icon-32.png -w 32 -h 32
+inkscape icons/icon.svg -o icons/icon-48.png -w 48 -h 48
+inkscape icons/icon.svg -o icons/icon-128.png -w 128 -h 128
