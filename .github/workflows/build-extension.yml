@@ -1,0 +1,66 @@
+name: Pack Chrome Extension
+
+on:
+  workflow_dispatch:
+    inputs:
+      include_readme:
+        description: Include README.md in the ZIP
+        required: false
+        default: false
+        type: boolean
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate manifest.json
+        run: |
+          test -f manifest.json || { echo "manifest.json is missing"; exit 1; }
+          jq -e '.name and .version and .manifest_version' manifest.json > /dev/null || { echo "manifest.json must contain name, version and manifest_version"; exit 1; }
+
+      - name: Compute package metadata
+        id: meta
+        run: |
+          NAME=$(jq -r '.name' manifest.json | sed 's/[^A-Za-z0-9._-]/-/g' | tr '[:upper:]' '[:lower:]')
+          VERSION=$(jq -r '.version' manifest.json)
+          ZIP_NAME="${NAME}-${VERSION}.zip"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "zip=$ZIP_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Create ZIP package
+        run: |
+          ZIP="${{ steps.meta.outputs.zip }}"
+          # Exclusions: common non-package folders/files
+          EXCLUDES=(
+            '.git/*'
+            '.github/*'
+            '.vscode/*'
+            'node_modules/*'
+            '*/node_modules/*'
+            '*.zip'
+          )
+          if [ "${{ inputs.include_readme }}" != "true" ]; then
+            EXCLUDES+=( 'README.md' )
+          fi
+          zip -r "$ZIP" . -x "${EXCLUDES[@]}"
+
+      - name: Upload ZIP as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chrome-extension-${{ steps.meta.outputs.version }}
+          path: ${{ steps.meta.outputs.zip }}
+
+      - name: Attach ZIP to release (tags only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.meta.outputs.zip }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
