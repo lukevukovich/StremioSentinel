@@ -1,6 +1,10 @@
-# Stremio Sentinel (Chrome MV3 Extension)
+<p align="center">
+  <img src="icons/icon-128.png" alt="Stremio Sentinel logo" width="128" />
+</p>
 
-Stremio Sentinel scans the Stremio Web Addons page and reports whether each addon has an update available by comparing the installed version with the version in its manifest JSON.
+<h1 align="center">Stremio Sentinel</h1>
+
+Stremio Sentinel is a Chrome extension that scans the Stremio Web Addons page and reports whether each addon has an update available by comparing the installed version with the version in its manifest JSON.
 
 ## Install
 
@@ -12,6 +16,8 @@ Stremio Sentinel scans the Stremio Web Addons page and reports whether each addo
 4. Toggle on **Developer mode** (top right).
 5. Click **Load unpacked** and select the extracted `stremio-sentinel-<version>` folder (the folder that has `manifest.json`).
 6. Visit `https://web.stremio.com/#/addons`. The panel appears only on the Addons route.
+
+**Note**: Do not delete, move, or rename the folder after loading the extension. If you do, you will need to remove and re-load the unpacked extension in Chrome.
 
 ### From Source (Local Folder)
 
