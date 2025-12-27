@@ -124,6 +124,7 @@
   const highlightedNodes = new Set();
 
   let scanAbort = { cancelled: false };
+  let isScanning = false;
 
   function styleButton(btn, { primary = false } = {}) {
     btn.style.background = primary ? "#6a5acd" : "transparent";
@@ -277,6 +278,12 @@
     });
     clearBtn.addEventListener("click", () => clearResults(status, list));
     cancelBtn.addEventListener("click", () => {
+      if (!isScanning) {
+        // Idle: nothing to cancel; persist message until next action
+        scanAbort.cancelled = false;
+        status.textContent = "Nothing to cancel.";
+        return;
+      }
       scanAbort.cancelled = true;
       status.textContent = "Cancelling…";
     });
@@ -567,13 +574,7 @@
     const emptyMsg = document.getElementById("stremio-sentinel-empty");
     if (emptyMsg) emptyMsg.style.display = "none";
 
-    // Keep the latest result visible within the extension panel
-    try {
-      const panel = document.getElementById("stremio-sentinel-panel");
-      if (panel) panel.scrollTop = panel.scrollHeight;
-    } catch (_) {}
-
-    // Removed auto-scroll to keep view at top
+    // No auto-scroll within the extension panel
 
     try {
       item.node.style.outline = item.needsUpdate
@@ -585,6 +586,7 @@
   }
 
   async function scan(statusNode, resultsNode, abort = { cancelled: false }) {
+    isScanning = true;
     statusNode.textContent = "Scanning addons…";
     resultsNode.innerHTML = "";
     // Start with hidden list until results appear
@@ -669,7 +671,13 @@
       await sleep(100);
     }
 
-    statusNode.textContent = "Scan complete.";
+    if (!abort.cancelled) {
+      statusNode.textContent = "Scan complete.";
+    } else {
+      statusNode.textContent = "Scan cancelled.";
+    }
+    isScanning = false;
+    abort.cancelled = false;
   }
 
   function maybeInit() {
