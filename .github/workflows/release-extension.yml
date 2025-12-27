@@ -1,0 +1,125 @@
+name: Release Chrome Extension
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag name to release (example: v1.2.3). Leave blank to use current ref.
+        required: false
+        type: string
+      include_readme:
+        description: Include README.md in the ZIP
+        required: false
+        default: false
+        type: boolean
+      replace_assets:
+        description: Replace ZIP on existing release (same tag)
+        required: false
+        default: true
+        type: boolean
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Determine tag
+        id: tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          # If workflow_dispatch provided a tag, use it; otherwise use the pushed tag.
+          TAG_INPUT="${{ github.event.inputs.tag || '' }}"
+          if [ -n "$TAG_INPUT" ]; then
+            TAG="$TAG_INPUT"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Validate manifest.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f manifest.json || { echo "manifest.json is missing"; exit 1; }
+          jq -e '.name and .version and .manifest_version' manifest.json > /dev/null \
+            || { echo "manifest.json must contain name, version and manifest_version"; exit 1; }
+
+      - name: Compute package metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          NAME=$(jq -r '.name' manifest.json | sed 's/[^A-Za-z0-9._-]/-/g' | tr '[:upper:]' '[:lower:]')
+          VERSION=$(jq -r '.version' manifest.json)
+          ZIP_NAME="${NAME}-${VERSION}.zip"
+          DIR_NAME="${NAME}-${VERSION}"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "zip=$ZIP_NAME" >> "$GITHUB_OUTPUT"
+          echo "dir=$DIR_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Enforce tag matches manifest version
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.tag.outputs.tag }}"
+          MANIFEST_VERSION="${{ steps.meta.outputs.version }}"
+          EXPECTED="v${MANIFEST_VERSION}"
+
+          if [ "$TAG" != "$EXPECTED" ]; then
+            echo "Tag/version mismatch:"
+            echo "  Tag:               $TAG"
+            echo "  manifest.json:     $MANIFEST_VERSION"
+            echo "  Expected tag:      $EXPECTED"
+            exit 1
+          fi
+
+      - name: Create ZIP package (folder at root)
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="${{ steps.meta.outputs.zip }}"
+          DIR="${{ steps.meta.outputs.dir }}"
+
+          rm -rf "$DIR" excludes.txt
+          mkdir -p "$DIR"
+
+          cat > excludes.txt << 'EOF'
+          .git/
+          .github/
+          .vscode/
+          node_modules/
+          */node_modules/
+          *.zip
+          dist/
+          excludes.txt
+          EOF
+
+          INCLUDE_README="${{ github.event.inputs.include_readme || 'false' }}"
+          if [ "$INCLUDE_README" != "true" ]; then
+            echo "README.md" >> excludes.txt
+          fi
+
+          rsync -a --exclude-from=excludes.txt ./ "$DIR/"
+          zip -r "$ZIP" "$DIR"
+
+      - name: Create or update GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.tag.outputs.tag }}
+          name: Stremio Sentinel ${{ steps.tag.outputs.tag }}
+          artifacts: ${{ steps.meta.outputs.zip }}
+          allowUpdates: ${{ github.event.inputs.replace_assets || 'true' }}
+          replacesArtifacts: ${{ github.event.inputs.replace_assets || 'true' }}
+          draft: false
+          makeLatest: true
+          generateReleaseNotes: true
+          token: ${{ secrets.GITHUB_TOKEN }}

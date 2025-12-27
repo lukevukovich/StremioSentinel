@@ -1,4 +1,4 @@
-name: Pack Chrome Extension
+name: Build Chrome Extension
 
 on:
   workflow_dispatch:
@@ -30,37 +30,51 @@ jobs:
           NAME=$(jq -r '.name' manifest.json | sed 's/[^A-Za-z0-9._-]/-/g' | tr '[:upper:]' '[:lower:]')
           VERSION=$(jq -r '.version' manifest.json)
           ZIP_NAME="${NAME}-${VERSION}.zip"
+          DIR_NAME="${NAME}-${VERSION}"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "zip=$ZIP_NAME" >> "$GITHUB_OUTPUT"
+          echo "dir=$DIR_NAME" >> "$GITHUB_OUTPUT"
 
-      - name: Create ZIP package
+      - name: Create ZIP package (folder at root)
         run: |
+          set -euo pipefail
           ZIP="${{ steps.meta.outputs.zip }}"
-          # Exclusions: common non-package folders/files
-          EXCLUDES=(
-            '.git/*'
-            '.github/*'
-            '.vscode/*'
-            'node_modules/*'
-            '*/node_modules/*'
-            '*.zip'
-          )
+          DIR="${{ steps.meta.outputs.dir }}"
+          rm -rf "$DIR"
+          mkdir -p "$DIR"
+          # Build rsync exclude list
+          cat > excludes.txt << 'EOF'
+          .git/
+          .github/
+          .vscode/
+          node_modules/
+          */node_modules/
+          *.zip
+          EOF
           if [ "${{ inputs.include_readme }}" != "true" ]; then
-            EXCLUDES+=( 'README.md' )
+            echo "README.md" >> excludes.txt
           fi
-          zip -r "$ZIP" . -x "${EXCLUDES[@]}"
+          # Copy project files into the versioned folder, respecting excludes
+          rsync -a --exclude-from=excludes.txt ./ "$DIR/"
+          # Zip the folder so the ZIP contains the top-level directory
+          zip -r "$ZIP" "$DIR"
 
       - name: Upload ZIP as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: chrome-extension-${{ steps.meta.outputs.version }}
+          name: stremio-sentinel-${{ steps.meta.outputs.version }}
           path: ${{ steps.meta.outputs.zip }}
 
-      - name: Attach ZIP to release (tags only)
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+      - name: Create or update GitHub Release
+        uses: ncipollo/release-action@v1
         with:
-          files: ${{ steps.meta.outputs.zip }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          tag: v${{ steps.meta.outputs.version }}
+          name: Stremio Sentinel v${{ steps.meta.outputs.version }}
+          artifacts: ${{ steps.meta.outputs.zip }}
+          allowUpdates: true
+          replacesArtifacts: true
+          draft: false
+          makeLatest: true
+          generateReleaseNotes: true
+          token: ${{ secrets.GITHUB_TOKEN }}

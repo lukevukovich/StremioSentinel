@@ -2,12 +2,33 @@
 
 Stremio Sentinel scans the Stremio Web Addons page and reports whether each addon has an update available by comparing the installed version with the version in its manifest JSON.
 
-## Install (Load Unpacked)
+## Install
 
-- Open Chrome and go to `chrome://extensions/`.
-- Toggle on **Developer mode**.
-- Click **Load unpacked** and select the project folder [StremioSentinel](StremioSentinel).
-- Visit `https://web.stremio.com/#/addons`. The panel appears only on the Addons route.
+### From GitHub Release (Recommended)
+
+1. Go to the GitHub Releases page of this repository and download the ZIP named `stremio-sentinel-<version>.zip`.
+2. Extract the ZIP. You should get a folder like `stremio-sentinel-<version>` that contains `manifest.json` and the extension files inside.
+3. Open Chrome and go to `chrome://extensions/`.
+4. Toggle on **Developer mode** (top right).
+5. Click **Load unpacked** and select the extracted `stremio-sentinel-<version>` folder (the folder that has `manifest.json`).
+6. Visit `https://web.stremio.com/#/addons`. The panel appears only on the Addons route.
+
+### From Source (Local Folder)
+
+If you cloned or downloaded the repository directly:
+
+1. Open Chrome and go to `chrome://extensions/`.
+2. Toggle on **Developer mode**.
+3. Click **Load unpacked** and select the project root folder (the folder that includes `manifest.json`).
+4. Visit `https://web.stremio.com/#/addons`.
+
+## Update
+
+When a new version is released:
+
+- Download the latest `stremio-sentinel-<version>.zip` from Releases and extract it.
+- Either replace the contents of your previously loaded folder with the new files and click **Reload** on the extension card in `chrome://extensions/`,
+  or remove the old unpacked extension and **Load unpacked** again pointing to the new `stremio-sentinel-<version>` folder.
 
 ## Usage
 
@@ -34,8 +55,8 @@ Stremio Sentinel scans the Stremio Web Addons page and reports whether each addo
 
 ## Icons
 
-- Header icon is sourced from [icons/icon.svg](icons/icon.svg) via `chrome.runtime.getURL()`.
-- Extension/toolbar icons are PNGs mapped in [manifest.json](manifest.json) under `icons` and `action.default_icon`.
+- Header icon is sourced from `icons/icon.svg` via `chrome.runtime.getURL()`.
+- Extension/toolbar icons are PNGs mapped in `manifest.json` under `icons` and `action.default_icon`.
 - Generate PNGs from the SVG (examples using Inkscape):
 
 ```powershell
@@ -58,17 +79,17 @@ inkscape icons/icon.svg -o icons/icon-128.png -w 128 -h 128
 - Slow scans after navigation: Use the built-in refresh-before-scan (triggered by Scan Addons).
 - Manifest URL shows `n/a`: The addon details may not expose a transport URL; try opening the modal manually to confirm.
 - Cancel unresponsive: Reload the extension in `chrome://extensions` to ensure the latest script is active.
-- Header icon missing: Confirm [manifest.json](manifest.json) includes `web_accessible_resources` and the file exists at [icons/icon.svg](icons/icon.svg).
+- Header icon missing: Confirm `manifest.json` includes `web_accessible_resources` and the file exists at `icons/icon.svg`.
 
 ## Project Files
 
-- [manifest.json](manifest.json): MV3 config, icons, permissions.
-- [background.js](background.js): Fetches manifest JSON and extracts version.
-- [content.js](content.js): Injects the panel, scans addons, handles UI, and messaging.
-- [icons/icon.svg](icons/icon.svg): Source artwork; export PNGs for the manifest.
+- `manifest.json`: MV3 config, icons, permissions.
+- `background.js`: Fetches manifest JSON and extracts version.
+- `content.js`: Injects the panel, scans addons, handles UI, and messaging.
+- `icons/icon.svg`: Source artwork; export PNGs for the manifest.
 
 ## Notes
 
 - Selectors are intentionally resilient to tolerate Stremio’s hashed class names.
 - Version comparison normalizes leading `v` and compares dot-separated numeric segments.
-- The panel avoids auto-scrolling during scans so you can read status updates at the top.
+- The panel auto-scrolls within the extension pane to keep the latest result visible; the main Stremio page itself does not scroll.
