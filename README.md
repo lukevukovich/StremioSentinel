@@ -13,6 +13,8 @@ Stremio Sentinel scans the Stremio Web Addons page and reports whether each addo
 5. Click **Load unpacked** and select the extracted `stremio-sentinel-<version>` folder (the folder that has `manifest.json`).
 6. Visit `https://web.stremio.com/#/addons`. The panel appears only on the Addons route.
 
+**Note**: Do not delete, move, or rename the folder after loading the extension. If you do, you will need to remove and re-load the unpacked extension in Chrome.
+
 ### From Source (Local Folder)
 
 If you cloned or downloaded the repository directly:
