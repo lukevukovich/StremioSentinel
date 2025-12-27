@@ -154,6 +154,7 @@
     panel.style.boxShadow = "0 8px 24px rgba(0,0,0,0.35)";
     panel.style.borderRadius = "8px";
     panel.style.padding = "12px";
+    panel.style.paddingTop = "0px";
     panel.style.width = "auto";
     panel.style.marginBottom = "8px";
     panel.style.maxHeight = "60vh";
@@ -166,7 +167,15 @@
     header.style.alignItems = "center";
     header.style.justifyContent = "start";
     header.style.gap = "8px";
-    header.style.marginBottom = "0px";
+    // Keep header visible while scrolling the panel
+    header.style.position = "sticky";
+    header.style.top = "0";
+    header.style.background = "#2a2843";
+    header.style.zIndex = "1";
+    header.style.paddingTop = "12px";
+    header.style.paddingBottom = "10px";
+    // Visual separation indicating scroll beneath header
+    header.style.borderBottom = "2px solid rgba(255,255,255,0.12)";
 
     const title = document.createElement("div");
     title.textContent = "Stremio Sentinel";
@@ -220,6 +229,7 @@
     list.style.marginTop = "10px";
     // Hide results list by default when empty
     list.style.display = "none";
+    list.style.marginBottom = "-6px";
 
     // Empty-state message shown only when the list is empty
     const emptyMsg = document.createElement("div");
@@ -412,7 +422,7 @@
       root: modalRoot,
     });
     if (!detailsReady) {
-      await sleep(100);
+      await sleep(180);
     }
 
     // Only use modal to get manifest URL; installed version comes from list item
@@ -442,6 +452,35 @@
       await sleep(50);
     }
     await sleep(50);
+  }
+
+  function scrollToAddon(node) {
+    try {
+      const list = document.querySelector(SELECTORS.listContainer);
+      if (list && typeof list.scrollTop === "number") {
+        const childRect = node.getBoundingClientRect();
+        const listRect = list.getBoundingClientRect();
+        const offset = childRect.top - listRect.top;
+        const centerAdjust = Math.max(
+          0,
+          (list.clientHeight - childRect.height) / 2
+        );
+        const target = Math.max(0, list.scrollTop + offset - centerAdjust);
+        list.scrollTo({ top: target, behavior: "smooth" });
+        return;
+      }
+    } catch (_) {}
+    try {
+      node.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    } catch (_) {}
+    try {
+      const bottom = Math.max(
+        document.documentElement.scrollHeight,
+        document.body ? document.body.scrollHeight : 0
+      );
+      window.scrollTo({ top: bottom, behavior: "smooth" });
+    } catch (_) {}
   }
 
   function renderResult(listNode, item) {
@@ -527,6 +566,12 @@
     listNode.style.display = "block";
     const emptyMsg = document.getElementById("stremio-sentinel-empty");
     if (emptyMsg) emptyMsg.style.display = "none";
+
+    // Keep the latest result visible within the extension panel
+    try {
+      const panel = document.getElementById("stremio-sentinel-panel");
+      if (panel) panel.scrollTop = panel.scrollHeight;
+    } catch (_) {}
 
     // Removed auto-scroll to keep view at top
 
