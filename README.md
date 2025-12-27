@@ -4,7 +4,7 @@
 
 <h1 align="center">Stremio Sentinel</h1>
 
-Stremio Sentinel scans the Stremio Web Addons page and reports whether each addon has an update available by comparing the installed version with the version in its manifest JSON.
+Stremio Sentinel is a Chrome extension that scans the Stremio Web Addons page and reports whether each addon has an update available by comparing the installed version with the version in its manifest JSON.
 
 ## Install
 
