@@ -73,7 +73,10 @@ jobs:
           fi
 
           rsync -a --exclude-from=excludes.txt ./ "$DIR/"
-          zip -r "$ZIP" "$DIR"
+          (
+            cd "$DIR"
+            zip -r "../$ZIP" .
+          )
 
       - name: Upload ZIP as artifact
         uses: actions/upload-artifact@v4
