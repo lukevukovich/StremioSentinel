@@ -10,7 +10,9 @@ on:
         type: boolean
   push:
     branches: [main]
-    tags: ["v*"]
+
+permissions:
+  contents: read
 
 jobs:
   package:
@@ -19,14 +21,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install build deps
+        run: sudo apt-get update && sudo apt-get install -y jq rsync zip
+
       - name: Validate manifest.json
+        shell: bash
         run: |
+          set -euo pipefail
           test -f manifest.json || { echo "manifest.json is missing"; exit 1; }
-          jq -e '.name and .version and .manifest_version' manifest.json > /dev/null || { echo "manifest.json must contain name, version and manifest_version"; exit 1; }
+          jq -e '.name and .version and .manifest_version' manifest.json > /dev/null \
+            || { echo "manifest.json must contain name, version and manifest_version"; exit 1; }
 
       - name: Compute package metadata
         id: meta
+        shell: bash
         run: |
+          set -euo pipefail
           NAME=$(jq -r '.name' manifest.json | sed 's/[^A-Za-z0-9._-]/-/g' | tr '[:upper:]' '[:lower:]')
           VERSION=$(jq -r '.version' manifest.json)
           ZIP_NAME="${NAME}-${VERSION}.zip"
@@ -37,13 +47,15 @@ jobs:
           echo "dir=$DIR_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Create ZIP package (folder at root)
+        shell: bash
         run: |
           set -euo pipefail
           ZIP="${{ steps.meta.outputs.zip }}"
           DIR="${{ steps.meta.outputs.dir }}"
-          rm -rf "$DIR"
+
+          rm -rf "$DIR" excludes.txt
           mkdir -p "$DIR"
-          # Build rsync exclude list
+
           cat > excludes.txt << 'EOF'
           .git/
           .github/
@@ -51,30 +63,20 @@ jobs:
           node_modules/
           */node_modules/
           *.zip
+          dist/
+          excludes.txt
           EOF
-          if [ "${{ inputs.include_readme }}" != "true" ]; then
+
+          INCLUDE_README="${{ github.event.inputs.include_readme || 'false' }}"
+          if [ "$INCLUDE_README" != "true" ]; then
             echo "README.md" >> excludes.txt
           fi
-          # Copy project files into the versioned folder, respecting excludes
+
           rsync -a --exclude-from=excludes.txt ./ "$DIR/"
-          # Zip the folder so the ZIP contains the top-level directory
           zip -r "$ZIP" "$DIR"
 
       - name: Upload ZIP as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: stremio-sentinel-${{ steps.meta.outputs.version }}
+          name: extension-${{ steps.meta.outputs.name }}-${{ steps.meta.outputs.version }}
           path: ${{ steps.meta.outputs.zip }}
-
-      - name: Create or update GitHub Release
-        uses: ncipollo/release-action@v1
-        with:
-          tag: v${{ steps.meta.outputs.version }}
-          name: Stremio Sentinel v${{ steps.meta.outputs.version }}
-          artifacts: ${{ steps.meta.outputs.zip }}
-          allowUpdates: true
-          replacesArtifacts: true
-          draft: false
-          makeLatest: true
-          generateReleaseNotes: true
-          token: ${{ secrets.GITHUB_TOKEN }}

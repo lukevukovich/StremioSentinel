@@ -3,10 +3,6 @@ name: Release Chrome Extension
 on:
   workflow_dispatch:
     inputs:
-      tag:
-        description: Tag name to release (example: v1.2.3). Leave blank to use current ref.
-        required: false
-        type: string
       include_readme:
         description: Include README.md in the ZIP
         required: false
@@ -30,19 +26,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Determine tag
-        id: tag
-        shell: bash
-        run: |
-          set -euo pipefail
-          # If workflow_dispatch provided a tag, use it; otherwise use the pushed tag.
-          TAG_INPUT="${{ github.event.inputs.tag || '' }}"
-          if [ -n "$TAG_INPUT" ]; then
-            TAG="$TAG_INPUT"
-          else
-            TAG="${GITHUB_REF_NAME}"
-          fi
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      - name: Install build deps
+        run: sudo apt-get update && sudo apt-get install -y jq rsync zip
 
       - name: Validate manifest.json
         shell: bash
@@ -70,15 +55,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TAG="${{ steps.tag.outputs.tag }}"
-          MANIFEST_VERSION="${{ steps.meta.outputs.version }}"
-          EXPECTED="v${MANIFEST_VERSION}"
-
+          TAG="${GITHUB_REF_NAME}"
+          EXPECTED="v${{ steps.meta.outputs.version }}"
           if [ "$TAG" != "$EXPECTED" ]; then
             echo "Tag/version mismatch:"
-            echo "  Tag:               $TAG"
-            echo "  manifest.json:     $MANIFEST_VERSION"
-            echo "  Expected tag:      $EXPECTED"
+            echo "  Tag:           $TAG"
+            echo "  manifest.json: ${{ steps.meta.outputs.version }}"
+            echo "  Expected tag:  $EXPECTED"
             exit 1
           fi
 
@@ -111,15 +94,23 @@ jobs:
           rsync -a --exclude-from=excludes.txt ./ "$DIR/"
           zip -r "$ZIP" "$DIR"
 
-      - name: Create or update GitHub Release
+      - name: Create or update GitHub Release (no generated notes)
         uses: ncipollo/release-action@v1
         with:
-          tag: ${{ steps.tag.outputs.tag }}
-          name: Stremio Sentinel ${{ steps.tag.outputs.tag }}
+          tag: ${{ github.ref_name }}
+          name: Stremio Sentinel ${{ github.ref_name }}
           artifacts: ${{ steps.meta.outputs.zip }}
           allowUpdates: ${{ github.event.inputs.replace_assets || 'true' }}
           replacesArtifacts: ${{ github.event.inputs.replace_assets || 'true' }}
           draft: false
           makeLatest: true
-          generateReleaseNotes: true
+          generateReleaseNotes: false
+          body: |
+            **Install**
+            1. Download the ZIP from this release
+            2. Extract it
+            3. Open `chrome://extensions`
+            4. Enable **Developer mode**
+            5. Click **Load unpacked**
+            6. Select the extracted folder (contains `manifest.json`)
           token: ${{ secrets.GITHUB_TOKEN }}
