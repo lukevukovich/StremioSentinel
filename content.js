@@ -139,9 +139,164 @@
     btn.style.lineHeight = "1.2";
   }
 
+  function setScanningUIState(active) {
+    const scanBtn = document.getElementById("stremio-sentinel-scan-btn");
+    const clearBtn = document.getElementById("stremio-sentinel-clear-btn");
+    const cancelBtn = document.getElementById("stremio-sentinel-cancel-btn");
+    // Disable starting new scans while active; allow cancel
+    if (scanBtn) {
+      scanBtn.disabled = !!active;
+      scanBtn.style.opacity = active ? "0.6" : "1";
+      scanBtn.style.cursor = active ? "not-allowed" : "pointer";
+      // Reset any hover/press transform when disabling/enabling
+      scanBtn.style.transform = "scale(1)";
+    }
+    if (clearBtn) {
+      clearBtn.disabled = !!active;
+      clearBtn.style.opacity = active ? "0.6" : "1";
+      clearBtn.style.cursor = active ? "not-allowed" : "pointer";
+      clearBtn.style.transform = "scale(1)";
+    }
+    if (cancelBtn) {
+      cancelBtn.disabled = !active;
+      cancelBtn.style.opacity = !active ? "0.6" : "1";
+      cancelBtn.style.cursor = !active ? "not-allowed" : "pointer";
+      cancelBtn.style.transform = "scale(1)";
+    }
+  }
+
+  function setMinimizeUIState(isHidden) {
+    const btn = document.getElementById("stremio-sentinel-minimize-btn");
+    const headerEl = document.getElementById("stremio-sentinel-header");
+    if (!btn) return;
+    if (isHidden) {
+      // Hidden (panel minimized): match panel outline color for clear cue
+      btn.style.background = "#4a4379";
+      btn.style.color = "#fff";
+      btn.style.border = "1px solid #4a4379";
+      if (headerEl) {
+        headerEl.style.borderBottom = "none";
+        headerEl.style.paddingBottom = "0px";
+      }
+    } else {
+      // Expanded: transparent background for subtle, clean look
+      btn.style.background = "transparent";
+      btn.style.color = "#c6c6d4";
+      btn.style.border = "1px solid #4a4379";
+      if (headerEl) {
+        headerEl.style.borderBottom = "2px solid rgba(255,255,255,0.12)";
+        headerEl.style.paddingBottom = "10px";
+      }
+    }
+  }
+
+  function attachButtonInteractions(btn) {
+    if (!btn || btn.dataset.interactions === "1") return;
+    btn.style.transition = "transform 120ms ease";
+    btn.style.willChange = "transform";
+    btn.style.transformOrigin = "center center";
+    btn.style.position = "relative";
+    btn.style.zIndex = "2";
+    btn.addEventListener("mouseenter", () => {
+      if (btn.disabled) return;
+      btn.style.transform = "scale(1.04)";
+    });
+    btn.addEventListener("mouseleave", () => {
+      btn.style.transform = "scale(1)";
+    });
+    btn.addEventListener("mousedown", () => {
+      if (btn.disabled) return;
+      btn.style.transform = "scale(0.97)";
+    });
+    btn.addEventListener("mouseup", () => {
+      if (btn.disabled) return;
+      btn.style.transform = "scale(1.04)";
+    });
+    btn.dataset.interactions = "1";
+  }
+
+  function updatePanelWidth() {
+    try {
+      const panel = document.getElementById("stremio-sentinel-panel");
+      if (!panel) return;
+      const w = window.innerWidth || document.documentElement.clientWidth || 0;
+      if (w <= 1600) {
+        panel.style.maxWidth = "463px";
+      } else {
+        panel.style.maxWidth = "475px";
+      }
+    } catch (_) {}
+  }
+
+  // Smoothly animate the results list height when rows are added
+  function appendRowSmooth(listNode, rowNode) {
+    try {
+      if (!listNode || !rowNode) {
+        return listNode && listNode.appendChild(rowNode);
+      }
+      if (listNode.dataset.animating === "1") {
+        // Avoid stacking animations; just append
+        listNode.appendChild(rowNode);
+        listNode.style.display = "block";
+        const emptyMsg = document.getElementById("stremio-sentinel-empty");
+        if (emptyMsg) emptyMsg.style.display = "none";
+        return;
+      }
+      const wasHidden = getComputedStyle(listNode).display === "none";
+      if (wasHidden) listNode.style.display = "block";
+      const prevHeight = listNode.offsetHeight;
+      listNode.style.overflow = "hidden";
+      listNode.style.willChange = "height";
+      listNode.style.transition = "height 160ms ease-out";
+      listNode.style.height = prevHeight + "px";
+      // Append new row, then animate to new height
+      listNode.appendChild(rowNode);
+      // Force reflow
+      void listNode.offsetHeight;
+      const newHeight = listNode.scrollHeight;
+      listNode.dataset.animating = "1";
+      listNode.style.height = newHeight + "px";
+      const done = () => {
+        listNode.removeEventListener("transitionend", done);
+        listNode.style.height = "";
+        listNode.style.transition = "";
+        listNode.style.overflow = "";
+        listNode.style.willChange = "";
+        listNode.dataset.animating = "0";
+      };
+      listNode.addEventListener("transitionend", done, { once: true });
+      const emptyMsg = document.getElementById("stremio-sentinel-empty");
+      if (emptyMsg) emptyMsg.style.display = "none";
+    } catch (_) {
+      // Fallback: plain append if animation fails
+      listNode.appendChild(rowNode);
+      listNode.style.display = "block";
+      const emptyMsg = document.getElementById("stremio-sentinel-empty");
+      if (emptyMsg) emptyMsg.style.display = "none";
+    }
+  }
+
   function ensureUI() {
     let panel = document.getElementById("stremio-sentinel-panel");
-    if (panel) return panel;
+    if (panel) {
+      // Ensure controls reflect current scanning/minimize state on re-use
+      setScanningUIState(isScanning);
+      const existingBody = panel.children && panel.children[1];
+      setMinimizeUIState(existingBody && existingBody.style.display === "none");
+      attachButtonInteractions(
+        document.getElementById("stremio-sentinel-scan-btn")
+      );
+      attachButtonInteractions(
+        document.getElementById("stremio-sentinel-clear-btn")
+      );
+      attachButtonInteractions(
+        document.getElementById("stremio-sentinel-cancel-btn")
+      );
+      attachButtonInteractions(
+        document.getElementById("stremio-sentinel-minimize-btn")
+      );
+      return panel;
+    }
     panel = document.createElement("div");
     panel.id = "stremio-sentinel-panel";
     panel.style.position = "fixed";
@@ -150,6 +305,7 @@
     panel.style.zIndex = "2147483647";
     panel.style.background = "#2a2843";
     panel.style.color = "#fff";
+        updatePanelWidth();
     panel.style.fontFamily =
       "system-ui, -apple-system, Segoe UI, Roboto, Arial";
     panel.style.boxShadow = "0 8px 24px rgba(0,0,0,0.35)";
@@ -157,9 +313,16 @@
     panel.style.padding = "12px";
     panel.style.paddingTop = "0px";
     panel.style.width = "auto";
+    // Apply initial responsive max-width on creation
+    (function(){
+      const w = window.innerWidth || document.documentElement.clientWidth || 0;
+      panel.style.maxWidth = w <= 1600 ? "463px" : "475px";
+    })();
     panel.style.marginBottom = "8px";
     panel.style.maxHeight = "60vh";
-    panel.style.overflow = "auto";
+    // Avoid horizontal clipping issues with sticky header; only scroll vertically
+    panel.style.overflowY = "auto";
+    panel.style.overflowX = "hidden";
     panel.style.border = "2px solid #4a4379";
 
     const header = document.createElement("div");
@@ -203,20 +366,24 @@
 
     const btn = document.createElement("button");
     btn.textContent = "Scan Addons";
+    btn.id = "stremio-sentinel-scan-btn";
     styleButton(btn, { primary: true });
 
     const clearBtn = document.createElement("button");
     clearBtn.textContent = "Clear";
+    clearBtn.id = "stremio-sentinel-clear-btn";
     styleButton(clearBtn);
 
     const minimizeBtn = document.createElement("button");
     minimizeBtn.textContent = "−";
     minimizeBtn.title = "Minimize";
+    minimizeBtn.id = "stremio-sentinel-minimize-btn";
     styleButton(minimizeBtn);
     minimizeBtn.style.fontWeight = "800";
 
     const cancelBtn = document.createElement("button");
     cancelBtn.textContent = "Cancel";
+    cancelBtn.id = "stremio-sentinel-cancel-btn";
     styleButton(cancelBtn);
 
     const status = document.createElement("div");
@@ -254,6 +421,9 @@
     controls.style.alignItems = "center";
     controls.style.gap = "8px";
     controls.style.flexWrap = "nowrap";
+    // Keep right-side breathing room and allow interaction scale without clipping
+    controls.style.paddingRight = "2px";
+    controls.style.overflow = "visible";
     controls.appendChild(btn);
     controls.appendChild(clearBtn);
     controls.appendChild(cancelBtn);
@@ -266,7 +436,17 @@
     panel.appendChild(header);
     panel.appendChild(body);
 
+    // Attach consistent hover/press effects to all controls
+    attachButtonInteractions(btn);
+    attachButtonInteractions(clearBtn);
+    attachButtonInteractions(cancelBtn);
+    attachButtonInteractions(minimizeBtn);
+
     btn.addEventListener("click", () => {
+      if (isScanning) {
+        status.textContent = "Already scanning…";
+        return;
+      }
       // Prefer a fresh page load on addons to ensure fast scanning
       try {
         sessionStorage.setItem("stremioSentinelAutoScan", "1");
@@ -278,23 +458,23 @@
     });
     clearBtn.addEventListener("click", () => clearResults(status, list));
     cancelBtn.addEventListener("click", () => {
-      if (!isScanning) {
-        // Idle: nothing to cancel; persist message until next action
-        scanAbort.cancelled = false;
-        status.textContent = "Nothing to cancel.";
-        return;
-      }
+      if (!isScanning) return;
       scanAbort.cancelled = true;
       status.textContent = "Cancelling…";
     });
     minimizeBtn.addEventListener("click", () => {
       const isHidden = body.style.display === "none";
       body.style.display = isHidden ? "block" : "none";
-      minimizeBtn.textContent = isHidden ? "−" : "+";
-      minimizeBtn.title = isHidden ? "Minimize" : "Expand";
+      const nowHidden = !isHidden;
+      minimizeBtn.textContent = nowHidden ? "+" : "−";
+      minimizeBtn.title = nowHidden ? "Expand" : "Minimize";
+      setMinimizeUIState(nowHidden);
     });
 
     document.body.appendChild(panel);
+    // Initialize controls to idle state on first render
+    setScanningUIState(false);
+    setMinimizeUIState(false);
     return panel;
   }
 
@@ -305,6 +485,7 @@
       try {
         node.style.outline = "";
         node.style.outlineOffset = "";
+      updatePanelWidth();
       } catch (_) {}
     }
     highlightedNodes.clear();
@@ -568,11 +749,7 @@
     row.appendChild(status);
     row.appendChild(toggle);
     row.appendChild(details);
-    listNode.appendChild(row);
-    // Ensure list is visible when it has items
-    listNode.style.display = "block";
-    const emptyMsg = document.getElementById("stremio-sentinel-empty");
-    if (emptyMsg) emptyMsg.style.display = "none";
+    appendRowSmooth(listNode, row);
 
     // No auto-scroll within the extension panel
 
@@ -587,6 +764,7 @@
 
   async function scan(statusNode, resultsNode, abort = { cancelled: false }) {
     isScanning = true;
+    setScanningUIState(true);
     statusNode.textContent = "Scanning addons…";
     resultsNode.innerHTML = "";
     // Start with hidden list until results appear
@@ -677,6 +855,7 @@
       statusNode.textContent = "Scan cancelled.";
     }
     isScanning = false;
+    setScanningUIState(false);
     abort.cancelled = false;
   }
 
@@ -709,6 +888,9 @@
 
   window.addEventListener("hashchange", maybeInit);
 
+  // Keep panel width responsive to window size
+  window.addEventListener("resize", updatePanelWidth);
+
   if (
     document.readyState === "complete" ||
     document.readyState === "interactive"
@@ -731,6 +913,12 @@
         }
 
         setTimeout(() => {
+          if (isScanning) {
+            const s =
+              document.getElementById("stremio-sentinel-status") || statusNode;
+            if (s) s.textContent = "Already scanning…";
+            return;
+          }
           const finalStatus =
             document.getElementById("stremio-sentinel-status") ||
             statusNode ||
