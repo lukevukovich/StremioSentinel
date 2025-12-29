@@ -221,59 +221,29 @@
       if (!panel) return;
       const w = window.innerWidth || document.documentElement.clientWidth || 0;
       if (w <= 1600) {
-        panel.style.maxWidth = "463px";
+        panel.style.maxWidth = "461px";
       } else {
-        panel.style.maxWidth = "475px";
+        panel.style.maxWidth = "473px";
       }
     } catch (_) {}
   }
 
-  // Smoothly animate the results list height when rows are added
+  // Append results without transitions to avoid issues when minimized
   function appendRowSmooth(listNode, rowNode) {
+    if (!listNode || !rowNode) return;
+    listNode.appendChild(rowNode);
+    // Ensure list is visible once we have content
+    listNode.style.display = "block";
+    // Clear any leftover animation styles from previous versions
     try {
-      if (!listNode || !rowNode) {
-        return listNode && listNode.appendChild(rowNode);
-      }
-      if (listNode.dataset.animating === "1") {
-        // Avoid stacking animations; just append
-        listNode.appendChild(rowNode);
-        listNode.style.display = "block";
-        const emptyMsg = document.getElementById("stremio-sentinel-empty");
-        if (emptyMsg) emptyMsg.style.display = "none";
-        return;
-      }
-      const wasHidden = getComputedStyle(listNode).display === "none";
-      if (wasHidden) listNode.style.display = "block";
-      const prevHeight = listNode.offsetHeight;
-      listNode.style.overflow = "hidden";
-      listNode.style.willChange = "height";
-      listNode.style.transition = "height 160ms ease-out";
-      listNode.style.height = prevHeight + "px";
-      // Append new row, then animate to new height
-      listNode.appendChild(rowNode);
-      // Force reflow
-      void listNode.offsetHeight;
-      const newHeight = listNode.scrollHeight;
-      listNode.dataset.animating = "1";
-      listNode.style.height = newHeight + "px";
-      const done = () => {
-        listNode.removeEventListener("transitionend", done);
-        listNode.style.height = "";
-        listNode.style.transition = "";
-        listNode.style.overflow = "";
-        listNode.style.willChange = "";
-        listNode.dataset.animating = "0";
-      };
-      listNode.addEventListener("transitionend", done, { once: true });
-      const emptyMsg = document.getElementById("stremio-sentinel-empty");
-      if (emptyMsg) emptyMsg.style.display = "none";
-    } catch (_) {
-      // Fallback: plain append if animation fails
-      listNode.appendChild(rowNode);
-      listNode.style.display = "block";
-      const emptyMsg = document.getElementById("stremio-sentinel-empty");
-      if (emptyMsg) emptyMsg.style.display = "none";
-    }
+      listNode.style.height = "";
+      listNode.style.transition = "";
+      listNode.style.overflow = "";
+      listNode.style.willChange = "";
+      if (listNode.dataset) listNode.dataset.animating = "0";
+    } catch (_) {}
+    const emptyMsg = document.getElementById("stremio-sentinel-empty");
+    if (emptyMsg) emptyMsg.style.display = "none";
   }
 
   function ensureUI() {
@@ -305,18 +275,19 @@
     panel.style.zIndex = "2147483647";
     panel.style.background = "#2a2843";
     panel.style.color = "#fff";
-        updatePanelWidth();
+    updatePanelWidth();
     panel.style.fontFamily =
       "system-ui, -apple-system, Segoe UI, Roboto, Arial";
     panel.style.boxShadow = "0 8px 24px rgba(0,0,0,0.35)";
     panel.style.borderRadius = "8px";
     panel.style.padding = "12px";
     panel.style.paddingTop = "0px";
+    panel.style.paddingRight = "10px";
     panel.style.width = "auto";
     // Apply initial responsive max-width on creation
-    (function(){
+    (function () {
       const w = window.innerWidth || document.documentElement.clientWidth || 0;
-      panel.style.maxWidth = w <= 1600 ? "463px" : "475px";
+      panel.style.maxWidth = w <= 1600 ? "461px" : "473px";
     })();
     panel.style.marginBottom = "8px";
     panel.style.maxHeight = "60vh";
@@ -347,6 +318,7 @@
     title.style.letterSpacing = "0.2px";
     title.style.fontSize = "16px";
     title.style.overflow = "hidden";
+    title.style.textWrap = "nowrap";
     title.style.textOverflow = "ellipsis";
 
     // SVG icon to the left of the title
@@ -469,6 +441,22 @@
       minimizeBtn.textContent = nowHidden ? "+" : "−";
       minimizeBtn.title = nowHidden ? "Expand" : "Minimize";
       setMinimizeUIState(nowHidden);
+      // On expand, clear any stale animation styles so list shows correctly
+      if (!nowHidden) {
+        const list = document.getElementById("stremio-sentinel-results");
+        if (list) {
+          try {
+            list.style.height = "";
+            list.style.transition = "";
+            list.style.overflow = "";
+            list.style.willChange = "";
+            if (list.dataset) list.dataset.animating = "0";
+            if (list.children && list.children.length > 0) {
+              list.style.display = "block";
+            }
+          } catch (_) {}
+        }
+      }
     });
 
     document.body.appendChild(panel);
@@ -485,7 +473,7 @@
       try {
         node.style.outline = "";
         node.style.outlineOffset = "";
-      updatePanelWidth();
+        updatePanelWidth();
       } catch (_) {}
     }
     highlightedNodes.clear();
