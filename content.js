@@ -1,4 +1,8 @@
 (function () {
+  const IGNORE_ADDONS = new Set([
+    "Local Files (without catalog support)",
+    "OpenSubtitles",
+  ]);
   const SELECTORS = {
     listContainer: '[class*="addons-list-container"]',
     listItemName: '[class*="name-container"]',
@@ -106,19 +110,34 @@
     return 0;
   }
 
-  async function fetchManifestVersion(url) {
-    return new Promise((resolve) => {
-      chrome.runtime.sendMessage({ type: "fetchManifest", url }, (resp) => {
-        if (!resp || !resp.ok) {
-          resolve({
-            ok: false,
-            error: resp?.error || "Failed to fetch manifest",
-          });
-        } else {
-          resolve({ ok: true, version: resp.version, json: resp.json });
-        }
-      });
+  async function fetchManifestVersion(url, { timeoutMs = 5000 } = {}) {
+    const msgPromise = new Promise((resolve) => {
+      try {
+        chrome.runtime.sendMessage({ type: "fetchManifest", url }, (resp) => {
+          if (!resp || !resp.ok) {
+            resolve({
+              ok: false,
+              error: resp?.error || "Failed to fetch manifest",
+            });
+          } else {
+            resolve({ ok: true, version: resp.version, json: resp.json });
+          }
+        });
+      } catch (e) {
+        resolve({ ok: false, error: String(e || "Messaging error") });
+      }
     });
+    const timeoutPromise = new Promise((resolve) => {
+      setTimeout(() => {
+        resolve({
+          ok: false,
+          timeout: true,
+          error: "Timeout while fetching manifest",
+        });
+      }, Math.max(500, timeoutMs));
+    });
+    // Race the background fetch with a local timeout
+    return Promise.race([msgPromise, timeoutPromise]);
   }
 
   const highlightedNodes = new Set();
@@ -662,8 +681,8 @@
   function renderResult(listNode, item) {
     const row = document.createElement("div");
     row.style.display = "grid";
-    row.style.gridTemplateColumns = "1fr auto auto";
-    row.style.gap = "8px";
+    row.style.gridTemplateColumns = "1fr auto";
+    row.style.gap = "4px";
     row.style.alignItems = "center";
     row.style.padding = "8px 0";
     row.style.borderTop = "1px solid rgba(255,255,255,0.08)";
@@ -674,15 +693,32 @@
     name.style.fontWeight = "600";
 
     const versions = document.createElement("div");
-    versions.textContent = `${item.currentVersion || "n/a"} → ${
-      item.manifestVersion || "n/a"
-    }`;
+    const manifestVersionText = item.manifestError
+      ? "n/a"
+      : item.manifestVersion || "n/a";
+    versions.textContent = `${
+      item.currentVersion || "n/a"
+    } → ${manifestVersionText}`;
     versions.style.opacity = "0.9";
 
     const status = document.createElement("div");
-    status.textContent = item.needsUpdate ? "Update available" : "Up-to-date";
-    status.style.fontWeight = "600";
-    status.style.color = item.needsUpdate ? "#ffb02e" : "#7bd88f";
+    // Place status as a full-width row under the title/versions
+    status.style.gridColumn = "1 / -1";
+    status.style.fontSize = "13px";
+    status.style.marginBottom = "4px";
+    status.style.letterSpacing = "0.2px";
+    if (item.manifestError) {
+      const isTimeout =
+        typeof item.manifestErrorMessage === "string" &&
+        item.manifestErrorMessage.toLowerCase().includes("timeout");
+      status.textContent = isTimeout ? "Timeout" : "Update recommended";
+      status.style.fontWeight = "700";
+      status.style.color = isTimeout ? "#ffb02e" : "#ff6b6b"; // yellow for timeout, red for error
+    } else {
+      status.textContent = item.needsUpdate ? "Update available" : "Up-to-date";
+      status.style.fontWeight = item.needsUpdate ? "700" : "600";
+      status.style.color = item.needsUpdate ? "#ffb02e" : "#7bd88f";
+    }
 
     const details = document.createElement("div");
     details.style.gridColumn = "1 / -1";
@@ -694,6 +730,8 @@
     details.style.paddingLeft = "8px";
     const urlEl = document.createElement("div");
     urlEl.textContent = `URL: ${item.manifestUrl || "n/a"}`;
+
+    // Do not render extra manifest error text in Details; keep URL + copy button only
     const urlBtn = document.createElement("button");
     urlBtn.textContent = "Copy manifest URL";
     urlBtn.style.marginTop = "4px";
@@ -720,6 +758,8 @@
     details.appendChild(urlBtn);
 
     const toggle = document.createElement("a");
+    // Keep toggle below status for clearer reading order
+    toggle.style.gridColumn = "1 / -1";
     toggle.href = "#";
     toggle.textContent = "Details";
     toggle.style.fontSize = "12px";
@@ -742,9 +782,13 @@
     // No auto-scroll within the extension panel
 
     try {
-      item.node.style.outline = item.needsUpdate
-        ? "2px solid #ffb02e"
-        : "2px solid #2e8b57";
+      if (item.manifestError) {
+        item.node.style.outline = "2px solid #ff6b6b";
+      } else {
+        item.node.style.outline = item.needsUpdate
+          ? "2px solid #ffb02e"
+          : "2px solid #2e8b57";
+      }
       item.node.style.outlineOffset = "2px";
       highlightedNodes.add(item.node);
     } catch (_) {}
@@ -809,17 +853,30 @@
       const currentVersion = listedVersion;
       let manifestVersion = null;
       let manifestJson = null;
+      let manifestError = false;
+      let manifestErrorMessage = "";
 
-      if (details.manifestUrl) {
+      if (IGNORE_ADDONS.has(name)) {
+        // These addons are known to not provide a manifest URL; mark as up-to-date
+        manifestVersion = currentVersion.substring(2) || null;
+      } else if (details.manifestUrl) {
         const resp = await fetchManifestVersion(details.manifestUrl);
-        if (resp.ok) {
+        if (resp && resp.ok) {
           manifestVersion = resp.version;
           manifestJson = resp.json;
+        } else {
+          manifestError = true;
+          manifestErrorMessage =
+            resp && resp.timeout ? "Timeout" : "Update recommended";
         }
+      } else {
+        // No manifest URL available
+        manifestError = true;
+        manifestErrorMessage = "Update recommended";
       }
 
       const needsUpdate =
-        currentVersion && manifestVersion
+        !manifestError && currentVersion && manifestVersion
           ? compareSemver(currentVersion, manifestVersion) < 0
           : false;
 
@@ -830,6 +887,8 @@
         needsUpdate,
         manifestUrl: details.manifestUrl,
         manifestJson,
+        manifestError,
+        manifestErrorMessage,
         node: child,
       });
 

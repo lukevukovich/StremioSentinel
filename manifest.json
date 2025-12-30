@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Stremio Sentinel",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "A Chrome extension that checks for Stremio addon updates.",
   "permissions": ["scripting", "activeTab", "tabs"],
   "host_permissions": ["*://*/*"],
