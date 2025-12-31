@@ -110,7 +110,7 @@
     return 0;
   }
 
-  async function fetchManifestVersion(url, { timeoutMs = 5000 } = {}) {
+  async function fetchManifestVersion(url, { timeoutMs = 8000 } = {}) {
     const msgPromise = new Promise((resolve) => {
       try {
         chrome.runtime.sendMessage({ type: "fetchManifest", url }, (resp) => {
@@ -711,7 +711,9 @@
       const isTimeout =
         typeof item.manifestErrorMessage === "string" &&
         item.manifestErrorMessage.toLowerCase().includes("timeout");
-      status.textContent = isTimeout ? "Timeout" : "Update recommended";
+      status.textContent = isTimeout
+        ? "Timeout"
+        : "Error: review addon";
       status.style.fontWeight = "700";
       status.style.color = isTimeout ? "#ffb02e" : "#ff6b6b"; // yellow for timeout, red for error
     } else {
@@ -867,12 +869,14 @@
         } else {
           manifestError = true;
           manifestErrorMessage =
-            resp && resp.timeout ? "Timeout" : "Update recommended";
+            resp && resp.timeout
+              ? "Timeout"
+              : "Error: review addon";
         }
       } else {
         // No manifest URL available
         manifestError = true;
-        manifestErrorMessage = "Update recommended";
+        manifestErrorMessage = "Error: review addon";
       }
 
       const needsUpdate =
