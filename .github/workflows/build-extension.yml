@@ -46,7 +46,7 @@ jobs:
           echo "zip=$ZIP_NAME" >> "$GITHUB_OUTPUT"
           echo "dir=$DIR_NAME" >> "$GITHUB_OUTPUT"
 
-      - name: Create ZIP package (folder at root)
+      - name: Create ZIP package (contents at root)
         shell: bash
         run: |
           set -euo pipefail
@@ -72,7 +72,8 @@ jobs:
             echo "README.md" >> excludes.txt
           fi
 
-          rsync -a --exclude-from=excludes.txt ./ "$DIR/"
+          # Exclude the destination directory itself to avoid nesting an empty copy
+          rsync -a --exclude-from=excludes.txt --exclude "$DIR/" ./ "$DIR/"
           (
             cd "$DIR"
             zip -r "../$ZIP" .
