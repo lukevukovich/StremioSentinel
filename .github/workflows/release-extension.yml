@@ -3,11 +3,6 @@ name: Release Chrome Extension
 on:
   workflow_dispatch:
     inputs:
-      include_readme:
-        description: Include README.md in the ZIP
-        required: false
-        default: false
-        type: boolean
       replace_assets:
         description: Replace ZIP on existing release (same tag)
         required: false
@@ -26,18 +21,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install build deps
-        run: sudo apt-get update && sudo apt-get install -y jq rsync zip
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Validate manifest.json
+      - name: Validate manifest metadata
         shell: bash
         run: |
           set -euo pipefail
           test -f manifest.json || { echo "manifest.json is missing"; exit 1; }
-          jq -e '.name and .version and .manifest_version' manifest.json > /dev/null \
-            || { echo "manifest.json must contain name, version and manifest_version"; exit 1; }
+          jq -e '.name and .version' manifest.json > /dev/null \
+            || { echo "manifest.json must contain name and version"; exit 1; }
 
-      - name: Compute package metadata
+      - name: Read manifest metadata
         id: meta
         shell: bash
         run: |
@@ -45,11 +40,9 @@ jobs:
           NAME=$(jq -r '.name' manifest.json | sed 's/[^A-Za-z0-9._-]/-/g' | tr '[:upper:]' '[:lower:]')
           VERSION=$(jq -r '.version' manifest.json)
           ZIP_NAME="${NAME}-${VERSION}.zip"
-          DIR_NAME="${NAME}-${VERSION}"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "zip=$ZIP_NAME" >> "$GITHUB_OUTPUT"
-          echo "dir=$DIR_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Enforce tag matches manifest version
         shell: bash
@@ -65,41 +58,21 @@ jobs:
             exit 1
           fi
 
-      - name: Create ZIP package (folder at root)
-        shell: bash
-        run: |
-          set -euo pipefail
-          ZIP="${{ steps.meta.outputs.zip }}"
-          DIR="${{ steps.meta.outputs.dir }}"
-
-          rm -rf "$DIR" excludes.txt
-          mkdir -p "$DIR"
-
-          cat > excludes.txt << 'EOF'
-          .git/
-          .github/
-          .vscode/
-          node_modules/
-          */node_modules/
-          *.zip
-          dist/
-          excludes.txt
-          EOF
-
-          INCLUDE_README="${{ github.event.inputs.include_readme || 'false' }}"
-          if [ "$INCLUDE_README" != "true" ]; then
-            echo "README.md" >> excludes.txt
-          fi
-
-          rsync -a --exclude-from=excludes.txt ./ "$DIR/"
-          zip -r "$ZIP" "$DIR"
+      - name: Download ZIP artifact from latest main build
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: build-extension.yml
+          workflow_conclusion: success
+          branch: main
+          name: extension-${{ steps.meta.outputs.name }}-${{ steps.meta.outputs.version }}
+          path: artifacts
 
       - name: Create or update GitHub Release (no generated notes)
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.ref_name }}
           name: Stremio Sentinel ${{ github.ref_name }}
-          artifacts: ${{ steps.meta.outputs.zip }}
+          artifacts: artifacts/${{ steps.meta.outputs.zip }}
           allowUpdates: ${{ github.event.inputs.replace_assets || 'true' }}
           replacesArtifacts: ${{ github.event.inputs.replace_assets || 'true' }}
           draft: false
